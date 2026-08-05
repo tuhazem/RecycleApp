@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  api:
+    image: ${DOCKER_REGISTRY-}recyclingappapi
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=db;Database=RecyclingAppDb;User Id=sa;Password=${SQL_PASSWORD:-Your_Str0ng_Passw0rd!};TrustServerCertificate=True;
+      - Redis__ConnectionString=redis:6379
+      - Jwt__Secret=${JWT_SECRET:-YourSuperSecretKeyForJwtAuthenticationWhichShouldBeLongEnough!}
+      - Jwt__Issuer=${JWT_ISSUER:-RecyclingApp}
+      - Jwt__Audience=${JWT_AUDIENCE:-RecyclingAppClients}
+      - Jwt__ExpiryMinutes=${JWT_EXPIRY:-60}
+      - Smtp__Host=${SMTP_HOST:-sandbox.smtp.mailtrap.io}
+      - Smtp__Port=${SMTP_PORT:-587}
+      - Smtp__Username=${SMTP_USERNAME:-11fb3608e3a235}
+      - Smtp__Password=${SMTP_PASSWORD:-24bf3822cac379}
+      - Smtp__EnableSsl=true
+      - Smtp__FromAddress=${SMTP_FROM_ADDRESS:-noreply@recyclingapp.com}
+      - Smtp__FromName=${SMTP_FROM_NAME:-Recycling App}
+    ports:
+      - "8081:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${SQL_PASSWORD:-Your_Str0ng_Passw0rd!}
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${SQL_PASSWORD:-Your_Str0ng_Passw0rd!}\" -Q \"SELECT 1\" -C || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - app-network
+
+volumes:
+  sql-data:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge

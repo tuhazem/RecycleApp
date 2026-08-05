@@ -1,0 +1,44 @@
+## Ignore Visual Studio & .NET temporary/build files
+[Ob]
+[Db]
+bin/
+obj/
+out/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+## User Secrets & App Settings secrets (if any)
+# appsettings.json
+# appsettings.Development.json
+# Note: Keep appsettings.json template but ignore actual secrets. 
+# Usually, we can check in appsettings.json if it contains no secrets or template values.
+# Since we have default connection strings, let's keep appsettings.json versioned so developers have a baseline,
+# but make sure user secrets aren't checked in.
+
+## Docker compose local overrides
+docker-compose.override.yml
+
+## NuGet Packages
+*.nupkg
+## The packages folder can be ignored because of PackageReference
+**/packages/
+**/Paket.Restore.targets
+
+## Rider / JetBrains
+.idea/
+
+## Crash dumps
+*.dmp
