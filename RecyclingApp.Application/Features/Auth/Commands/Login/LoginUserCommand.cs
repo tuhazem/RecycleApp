@@ -51,7 +51,8 @@ public class LoginUserCommandHandler : IRequestHandler<LoginUserCommand, LoginRe
         }
 
         // 3. Generate JWT Token
-        var token = _tokenProvider.GenerateJwtToken(user);
+        var roles = await _userManager.GetRolesAsync(user);
+        var token = _tokenProvider.GenerateJwtToken(user, roles);
         return new LoginResult(true, Token: token);
     }
 }

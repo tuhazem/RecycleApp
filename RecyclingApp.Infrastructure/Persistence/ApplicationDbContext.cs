@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using RecyclingApp.Application.Common.Interfaces;
 using RecyclingApp.Domain.Entities;
 using System.Reflection;
 
@@ -8,12 +9,19 @@ namespace RecyclingApp.Infrastructure.Persistence;
 /// <summary>
 /// Entity Framework Core Database Context extending IdentityDbContext for user authentication.
 /// </summary>
-public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
+public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IApplicationDbContext
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
     {
     }
+
+    // DbSets for domain entities
+    public DbSet<Category> Categories { get; set; }
+    public DbSet<Product> Products { get; set; }
+    public DbSet<RecyclingTransaction> RecyclingTransactions { get; set; }
+
+
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

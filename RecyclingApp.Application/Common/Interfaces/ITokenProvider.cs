@@ -7,5 +7,5 @@ namespace RecyclingApp.Application.Common.Interfaces;
 /// </summary>
 public interface ITokenProvider
 {
-    string GenerateJwtToken(ApplicationUser user);
+    string GenerateJwtToken(ApplicationUser user , IList<string> roles);
 }

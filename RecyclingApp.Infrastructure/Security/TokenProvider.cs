@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using RecyclingApp.Application.Common.Interfaces;
@@ -22,7 +23,7 @@ public class TokenProvider : ITokenProvider
         _configuration = configuration;
     }
 
-    public string GenerateJwtToken(ApplicationUser user)
+    public string GenerateJwtToken(ApplicationUser user, IList<string> roles)
     {
         var secretKey = _configuration["Jwt:Secret"] ?? "DefaultSuperSecretKeyForDevelopmentOnly1234567890!";
         var issuer = _configuration["Jwt:Issuer"] ?? "RecyclingApp";
@@ -40,6 +41,11 @@ public class TokenProvider : ITokenProvider
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Name, user.FullName)
         };
+
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
 
         var token = new JwtSecurityToken(
             issuer: issuer,

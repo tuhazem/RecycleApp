@@ -12,6 +12,10 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
             .IsRequired()
             .HasMaxLength(100);
 
+        builder.Property(u => u.PointsBalance)
+            .HasColumnType("decimal(18,2)")
+            .HasDefaultValue(0m);
+
         // Map Address Value Object as an Owned Type
         builder.OwnsOne(u => u.Address, a =>
         {

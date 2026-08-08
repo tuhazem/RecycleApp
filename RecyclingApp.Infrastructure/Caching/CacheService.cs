@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 using RecyclingApp.Application.Common.Interfaces;
 using System;
 using System.Text.Json;
@@ -13,27 +14,30 @@ namespace RecyclingApp.Infrastructure.Caching;
 public class CacheService : ICacheService
 {
     private readonly IDistributedCache _distributedCache;
+    private readonly ILogger<CacheService> logger;
 
-    public CacheService(IDistributedCache distributedCache)
+    public CacheService(IDistributedCache distributedCache , ILogger<CacheService> logger)
     {
         _distributedCache = distributedCache;
+        this.logger = logger;
     }
 
     public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
     {
-        var cachedString = await _distributedCache.GetStringAsync(key, cancellationToken);
-        if (string.IsNullOrEmpty(cachedString))
-        {
-            return default;
-        }
-
         try
         {
+            var cachedString = await _distributedCache.GetStringAsync(key, cancellationToken);
+            if (string.IsNullOrEmpty(cachedString))
+            {
+                return default;
+            }
+
             return JsonSerializer.Deserialize<T>(cachedString);
         }
-        catch (JsonException)
+        catch (Exception ex)
         {
-            // If deserialization fails, return default rather than breaking the application flow
+
+            logger.LogWarning(ex, "Cache get failed for key '{CacheKey}'. Falling back to DB.", key);
             return default;
         }
     }

@@ -30,6 +30,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
             maxRetryDelay: TimeSpan.FromSeconds(10),
             errorNumbersToAdd: null)));
 
+builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
+
 // 2. Configure ASP.NET Core Identity for the ApplicationUser
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
@@ -67,7 +69,7 @@ builder.Services.AddMediatR(cfg =>
 builder.Services.AddValidatorsFromAssembly(applicationAssembly);
 
 // 7. Configure JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "DefaultSuperSecretKeyForDevelopmentOnly1234567890!";
+var jwtSecret = builder.Configuration["Jwt:Secret"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "RecyclingApp";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "RecyclingAppUsers";
 
@@ -86,7 +88,7 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtIssuer,
         ValidAudience = jwtAudience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret ?? "antigravity_very_secure_default_key_32_chars_long")),
         ClockSkew = TimeSpan.Zero
     };
 });
@@ -147,11 +149,18 @@ using (var scope = app.Services.CreateScope())
             logger.LogInformation("Applying database migrations...");
             context.Database.Migrate();
             logger.LogInformation("Database migrations applied successfully.");
+
+            // Seed database
+            logger.LogInformation("Seeding database...");
+            var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+            var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
+            await DbSeeder.SeedAsync(context, userManager, roleManager);
+            logger.LogInformation("Database seeded successfully.");
         }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred while applying database migrations on startup.");
+        logger.LogError(ex, "An error occurred while applying migrations or seeding the database.");
     }
 }
 
