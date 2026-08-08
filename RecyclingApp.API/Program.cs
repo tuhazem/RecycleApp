@@ -147,7 +147,7 @@ using (var scope = app.Services.CreateScope())
         if (context.Database.IsRelational())
         {
             logger.LogInformation("Applying database migrations...");
-            context.Database.Migrate();
+            await context.Database.MigrateAsync();
             logger.LogInformation("Database migrations applied successfully.");
 
             // Seed database
