@@ -1,6 +1,50 @@
-@RecyclingApp.API_HostAddress = http://localhost:5004
+@baseUrl = http://localhost:5004
 
-GET {{RecyclingApp.API_HostAddress}}/weatherforecast/
+### 1. Login to get JWT Token
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "emailOrPhone": "user@recycleapp.com",
+  "password": "User@123"
+}
+
+### Save Token from Login Response
+@authToken = {{login.response.body.token}}
+
+### 2. Get User Profile (GET /api/profile)
+GET {{baseUrl}}/api/profile
+Authorization: Bearer {{authToken}}
 Accept: application/json
 
-###
+### 3. Get User Profile (GET /api/users/me alias)
+GET {{baseUrl}}/api/users/me
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 4. Update User Profile (PUT /api/profile)
+PUT {{baseUrl}}/api/profile
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "username": "new_username",
+  "email": "user@recycleapp.com",
+  "phone": "01000000000",
+  "address": "New Address"
+}
+
+### 5. Get All Categories
+# @name getCategories
+GET {{baseUrl}}/api/categories
+Accept: application/json
+
+### 6. Get Products by Category (GET /api/products/category/{categoryId})
+@sampleCategoryId = {{getCategories.response.body[0].id}}
+GET {{baseUrl}}/api/products/category/{{sampleCategoryId}}?pageIndex=1&pageSize=5
+Accept: application/json
+
+### 7. Logout (POST /api/auth/logout) - No request body required
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{authToken}}

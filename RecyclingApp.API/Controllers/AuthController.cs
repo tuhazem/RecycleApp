@@ -1,15 +1,22 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using RecyclingApp.Application.Common.Models;
 using RecyclingApp.Application.Features.Auth.Commands.ForgotPassword;
 using RecyclingApp.Application.Features.Auth.Commands.Login;
+using RecyclingApp.Application.Features.Auth.Commands.Logout;
 using RecyclingApp.Application.Features.Auth.Commands.Register;
 using RecyclingApp.Application.Features.Auth.Commands.ResetPassword;
+using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace RecyclingApp.API.Controllers;
 
 /// <summary>
-/// Controller for Authentication endpoints: Register, Login, Forgot Password, and Reset Password.
+/// Controller for Authentication endpoints: Register, Login, Logout, Forgot Password, and Reset Password.
 /// </summary>
 [ApiController]
 [Route("api/auth")]
@@ -44,6 +51,37 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Logs out the authenticated user by invalidating the active JWT token in Redis and clearing session caches.
+    /// No request body is required — user identity and access token are extracted directly from the Bearer header.
+    /// </summary>
+    [Authorize]
+    [HttpPost("logout")]
+    [ProducesResponseType(typeof(LogoutResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Logout([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] LogoutRequestDto? request = null)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized(Result.Failure("User ID claim not found in JWT token."));
+        }
+
+        var authHeader = Request.Headers["Authorization"].ToString();
+        var accessToken = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? authHeader["Bearer ".Length..].Trim()
+            : null;
+
+        var command = new LogoutUserCommand(userId, accessToken, request?.RefreshToken);
+        var result = await _mediator.Send(command);
+        if (!result.Succeeded)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(new LogoutResponseDto(result.Data?.Message ?? "Logged out successfully"));
+    }
+
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordCommand command)
     {
@@ -66,3 +104,6 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 }
+
+public record LogoutRequestDto(string? RefreshToken = null);
+public record LogoutResponseDto(string Message);

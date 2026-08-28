@@ -1,27 +1,37 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using RecyclingApp.Application.Common.Interfaces;
 using RecyclingApp.Domain.Entities;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 
 namespace RecyclingApp.Application.Features.Auth.Commands.Login;
 
 public record LoginUserCommand(string EmailOrPhone, string Password) : IRequest<LoginResult>;
 
-public record LoginResult(bool Succeeded, string? Token = null, string? Message = null);
+public record LoginResult(
+    bool Succeeded,
+    string? Token = null,
+    string? RefreshToken = null,
+    string? Message = null);
 
 public class LoginUserCommandHandler : IRequestHandler<LoginUserCommand, LoginResult>
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ITokenProvider _tokenProvider;
+    private readonly ICacheService _cacheService;
 
-    public LoginUserCommandHandler(UserManager<ApplicationUser> userManager, ITokenProvider tokenProvider)
+    public LoginUserCommandHandler(
+        UserManager<ApplicationUser> userManager,
+        ITokenProvider tokenProvider,
+        ICacheService cacheService)
     {
         _userManager = userManager;
         _tokenProvider = tokenProvider;
+        _cacheService = cacheService;
     }
 
     public async Task<LoginResult> Handle(LoginUserCommand request, CancellationToken cancellationToken)
@@ -50,10 +60,21 @@ public class LoginUserCommandHandler : IRequestHandler<LoginUserCommand, LoginRe
             return new LoginResult(false, Message: "Invalid email/phone or password.");
         }
 
-        // 3. Generate JWT Token
+        // 3. Generate JWT Access Token and Refresh Token
         var roles = await _userManager.GetRolesAsync(user);
         var token = _tokenProvider.GenerateJwtToken(user, roles);
-        return new LoginResult(true, Token: token);
+        var refreshToken = _tokenProvider.GenerateRefreshToken();
+
+        // 4. Store Refresh Token in Cache with 7-day expiration
+        var refreshTokenKey = $"refresh-token-{refreshToken}";
+        await _cacheService.SetAsync(refreshTokenKey, user.Id, TimeSpan.FromDays(7), cancellationToken);
+
+        return new LoginResult(
+            Succeeded: true,
+            Token: token,
+            RefreshToken: refreshToken,
+            Message: "Login successful"
+        );
     }
 }
 

@@ -48,7 +48,11 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 var redisConnectionString = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    options.Configuration = redisConnectionString;
+    var configOptions = StackExchange.Redis.ConfigurationOptions.Parse(redisConnectionString);
+    configOptions.ConnectTimeout = 1000;
+    configOptions.SyncTimeout = 1000;
+    configOptions.AbortOnConnectFail = false;
+    options.ConfigurationOptions = configOptions;
     options.InstanceName = "RecyclingApp_";
 });
 

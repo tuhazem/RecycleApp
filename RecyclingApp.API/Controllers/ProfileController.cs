@@ -1,6 +1,10 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using RecyclingApp.Application.Common.Models;
+using RecyclingApp.Application.Features.Profile.Commands.UpdateProfile;
+using RecyclingApp.Application.Features.Profile.DTOs;
 using RecyclingApp.Application.Features.Profile.Queries.GetProfile;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -8,7 +12,7 @@ using System.Threading.Tasks;
 namespace RecyclingApp.API.Controllers;
 
 /// <summary>
-/// Controller for Profile endpoints. Protected with Authorize attribute.
+/// Controller for authenticated User Profile Management (Get, Update).
 /// </summary>
 [Authorize]
 [ApiController]
@@ -22,14 +26,21 @@ public class ProfileController : ControllerBase
         _mediator = mediator;
     }
 
+    /// <summary>
+    /// Gets the profile of the currently authenticated user.
+    /// Accessible via GET /api/profile and GET /api/users/me.
+    /// </summary>
     [HttpGet]
+    [HttpGet("/api/users/me")]
+    [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProfile()
     {
-        // Extract the NameIdentifier (UserId) claim from the JWT token
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
         {
-            return Unauthorized(new { Message = "User ID claim not found in JWT." });
+            return Unauthorized(Result.Failure("User ID claim not found in JWT token."));
         }
 
         var result = await _mediator.Send(new GetUserProfileQuery(userId));
@@ -38,6 +49,48 @@ public class ProfileController : ControllerBase
             return NotFound(result);
         }
 
-        return Ok(result.Profile);
+        return Ok(result.Data);
+    }
+
+    /// <summary>
+    /// Updates the profile of the currently authenticated user.
+    /// Strictly guarantees users can only modify their own profile.
+    /// </summary>
+    [HttpPut]
+    [ProducesResponseType(typeof(UpdateProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto request)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized(Result.Failure("User ID claim not found in JWT token."));
+        }
+
+        var command = new UpdateUserProfileCommand(
+            userId,
+            request.Username,
+            request.Email,
+            request.Phone,
+            request.Address
+        );
+
+        var result = await _mediator.Send(command);
+        if (!result.Succeeded)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result.Data);
     }
 }
+
+/// <summary>
+/// Request contract for updating a user profile.
+/// </summary>
+public record UpdateProfileDto(
+    string Username,
+    string Email,
+    string Phone,
+    string Address);

@@ -10,16 +10,17 @@ namespace RecyclingApp.Infrastructure.Caching;
 
 /// <summary>
 /// Cache service implementing ICacheService using IDistributedCache (configured with Redis).
+/// Designed with graceful degradation when Redis is temporarily unreachable.
 /// </summary>
 public class CacheService : ICacheService
 {
     private readonly IDistributedCache _distributedCache;
-    private readonly ILogger<CacheService> logger;
+    private readonly ILogger<CacheService> _logger;
 
-    public CacheService(IDistributedCache distributedCache , ILogger<CacheService> logger)
+    public CacheService(IDistributedCache distributedCache, ILogger<CacheService> logger)
     {
         _distributedCache = distributedCache;
-        this.logger = logger;
+        _logger = logger;
     }
 
     public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
@@ -36,32 +37,38 @@ public class CacheService : ICacheService
         }
         catch (Exception ex)
         {
-
-            logger.LogWarning(ex, "Cache get failed for key '{CacheKey}'. Falling back to DB.", key);
+            _logger.LogWarning(ex, "Cache get failed for key '{CacheKey}'. Falling back to database.", key);
             return default;
         }
     }
 
     public async Task SetAsync<T>(string key, T value, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
     {
-        var options = new DistributedCacheEntryOptions();
-        
-        if (expiration.HasValue)
+        try
         {
-            options.AbsoluteExpirationRelativeToNow = expiration;
-        }
-        else
-        {
-            // Fallback default expiration: 1 hour
-            options.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
-        }
+            var options = new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = expiration ?? TimeSpan.FromHours(1)
+            };
 
-        var serializedString = JsonSerializer.Serialize(value);
-        await _distributedCache.SetStringAsync(key, serializedString, options, cancellationToken);
+            var serializedString = JsonSerializer.Serialize(value);
+            await _distributedCache.SetStringAsync(key, serializedString, options, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache set failed for key '{CacheKey}'. Continuing without caching.", key);
+        }
     }
 
     public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
     {
-        await _distributedCache.RemoveAsync(key, cancellationToken);
+        try
+        {
+            await _distributedCache.RemoveAsync(key, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cache remove failed for key '{CacheKey}'. Continuing without evicting.", key);
+        }
     }
 }
