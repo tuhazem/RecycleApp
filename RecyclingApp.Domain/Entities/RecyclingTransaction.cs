@@ -3,7 +3,7 @@ using System;
 namespace RecyclingApp.Domain.Entities;
 
 /// <summary>
-/// Domain model for a Recycling/Product Transaction in the system.
+/// Domain model for a Recycling/Product Transaction (Order) in the system.
 /// </summary>
 public class RecyclingTransaction
 {
@@ -13,6 +13,7 @@ public class RecyclingTransaction
     public int Quantity { get; private set; }
     public decimal Amount { get; private set; }
     public DateTime TransactionDate { get; private set; }
+    public string Status { get; private set; } = "Completed"; // "Completed", "Pending", "Cancelled"
 
     public virtual ApplicationUser User { get; private set; } = default!;
     public virtual Product Product { get; private set; } = default!;
@@ -20,7 +21,7 @@ public class RecyclingTransaction
     // EF Core parameterless constructor
     protected RecyclingTransaction() { }
 
-    public RecyclingTransaction(string userId, Guid productId, int quantity, decimal amount)
+    public RecyclingTransaction(string userId, Guid productId, int quantity, decimal amount, string status = "Completed")
     {
         if (string.IsNullOrWhiteSpace(userId))
         {
@@ -48,5 +49,15 @@ public class RecyclingTransaction
         Quantity = quantity;
         Amount = amount;
         TransactionDate = DateTime.UtcNow;
+        Status = string.IsNullOrWhiteSpace(status) ? "Completed" : status;
+    }
+
+    public void UpdateStatus(string status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            throw new ArgumentException("Status cannot be empty.", nameof(status));
+        }
+        Status = status;
     }
 }

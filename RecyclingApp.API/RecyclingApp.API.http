@@ -1,7 +1,7 @@
 @baseUrl = http://localhost:5004
 
-### 1. Login to get JWT Token
-# @name login
+### 1. User Login (Customer)
+# @name userLogin
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
@@ -10,8 +10,8 @@ Content-Type: application/json
   "password": "User@123"
 }
 
-### Save Token from Login Response
-@authToken = {{login.response.body.token}}
+### Save User Token
+@authToken = {{userLogin.response.body.token}}
 
 ### 2. Get User Profile (GET /api/profile)
 GET {{baseUrl}}/api/profile
@@ -45,6 +45,65 @@ Accept: application/json
 GET {{baseUrl}}/api/products/category/{{sampleCategoryId}}?pageIndex=1&pageSize=5
 Accept: application/json
 
-### 7. Logout (POST /api/auth/logout) - No request body required
+### 7. Logout (POST /api/auth/logout)
 POST {{baseUrl}}/api/auth/logout
 Authorization: Bearer {{authToken}}
+
+###############################################################################
+### ADMIN ANALYTICS & DASHBOARD ENDPOINTS
+###############################################################################
+
+### 8. Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "emailOrPhone": "admin@recycleapp.com",
+  "password": "Admin@123"
+}
+
+### Save Admin Token
+@adminToken = {{adminLogin.response.body.token}}
+
+### 9. Executive Summary Metrics (GET /api/admin/analytics/summary)
+GET {{baseUrl}}/api/admin/analytics/summary
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 10. Top Selling Products (GET /api/admin/analytics/top-products?count=5)
+GET {{baseUrl}}/api/admin/analytics/top-products?count=5
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 11. Top Customers / Big Spenders (GET /api/admin/analytics/top-customers?count=5)
+GET {{baseUrl}}/api/admin/analytics/top-customers?count=5
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 12. Customer Directory with Aggregated Stats (GET /api/admin/analytics/customers)
+# @name getCustomers
+GET {{baseUrl}}/api/admin/analytics/customers?pageIndex=1&pageSize=10
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 13. Customer Full Purchase & Order History (GET /api/admin/analytics/customers/{id}/orders)
+@sampleCustomerId = {{getCustomers.response.body.data.items[0].customerId}}
+GET {{baseUrl}}/api/admin/analytics/customers/{{sampleCustomerId}}/orders
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 14. Sales Performance Trends - Monthly (GET /api/admin/analytics/sales-trend?period=monthly)
+GET {{baseUrl}}/api/admin/analytics/sales-trend?period=monthly
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 15. Sales Performance Trends - Weekly (GET /api/admin/analytics/sales-trend?period=weekly)
+GET {{baseUrl}}/api/admin/analytics/sales-trend?period=weekly
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### 16. Sales Performance Trends - Daily (GET /api/admin/analytics/sales-trend?period=daily)
+GET {{baseUrl}}/api/admin/analytics/sales-trend?period=daily
+Authorization: Bearer {{adminToken}}
+Accept: application/json

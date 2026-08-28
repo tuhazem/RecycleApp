@@ -47,15 +47,15 @@ public static class DbSeeder
             }
         }
 
-        // 3. Seed Regular User
-        var userEmail = "user@recycleapp.com";
-        var regularUser = await userManager.FindByEmailAsync(userEmail);
+        // 3. Seed Regular Users (Customers)
+        var user1Email = "user@recycleapp.com";
+        var regularUser = await userManager.FindByEmailAsync(user1Email);
         if (regularUser == null)
         {
             regularUser = new ApplicationUser
             {
-                UserName = userEmail,
-                Email = userEmail,
+                UserName = user1Email,
+                Email = user1Email,
                 FullName = "John Doe",
                 PhoneNumber = "+201111111111",
                 Address = new Address("456 User Rd", "Giza", "12"),
@@ -66,6 +66,48 @@ public static class DbSeeder
             if (result.Succeeded)
             {
                 await userManager.AddToRoleAsync(regularUser, "User");
+            }
+        }
+
+        var user2Email = "sarah.connor@example.com";
+        var customer2 = await userManager.FindByEmailAsync(user2Email);
+        if (customer2 == null)
+        {
+            customer2 = new ApplicationUser
+            {
+                UserName = "sarah_connor",
+                Email = user2Email,
+                FullName = "Sarah Connor",
+                PhoneNumber = "+201222222222",
+                Address = new Address("789 Resistance Blvd", "Alexandria", "5"),
+                PointsBalance = 480
+            };
+
+            var result = await userManager.CreateAsync(customer2, "User@123");
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(customer2, "User");
+            }
+        }
+
+        var user3Email = "michael.scott@dundermifflin.com";
+        var customer3 = await userManager.FindByEmailAsync(user3Email);
+        if (customer3 == null)
+        {
+            customer3 = new ApplicationUser
+            {
+                UserName = "michael_scott",
+                Email = user3Email,
+                FullName = "Michael Scott",
+                PhoneNumber = "+201555555555",
+                Address = new Address("1725 Slough Ave", "Scranton", "2B"),
+                PointsBalance = 150
+            };
+
+            var result = await userManager.CreateAsync(customer3, "User@123");
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(customer3, "User");
             }
         }
 
@@ -83,28 +125,33 @@ public static class DbSeeder
             // 5. Seed Products
             var petBottle = new Product("PET Plastic Bottle", "Standard plastic water/soda bottles.", new Money(1.50m), 500, 50, "PL-PET-01", plastics.Id);
             var hdpeJug = new Product("HDPE Milk Jug", "High-density polyethylene milk jugs.", new Money(2.20m), 200, 20, "PL-HDPE-02", plastics.Id);
-            
-            var cardboard = new Product("Corrugated Cardboard", "Flattened shipping boxes.", new Money(0.80m), 10, 30, "PP-CRD-01", paper.Id); // Low stock (10 <= 30)
+            var cardboard = new Product("Corrugated Cardboard", "Flattened shipping boxes.", new Money(0.80m), 10, 30, "PP-CRD-01", paper.Id); // Low stock
             var newsPaper = new Product("Newspapers & Magazines", "Clean bundle of papers.", new Money(0.50m), 0, 15, "PP-NWS-02", paper.Id); // Out of stock
-
             var sodaCan = new Product("Aluminum Soda Can", "Clean aluminum drink cans.", new Money(3.00m), 1000, 100, "MT-ALM-01", metal.Id);
             var steelCan = new Product("Steel Food Can", "Rinsed steel soup/food cans.", new Money(1.80m), 600, 50, "MT-STL-02", metal.Id);
-
             var glassBottle = new Product("Glass Beverage Bottle", "Green or clear glass bottles.", new Money(2.50m), 300, 40, "GL-BOT-01", glass.Id);
 
             context.Products.AddRange(petBottle, hdpeJug, cardboard, newsPaper, sodaCan, steelCan, glassBottle);
             await context.SaveChangesAsync();
 
-            // 6. Seed Recycling Transactions
-            if (regularUser != null)
+            // 6. Seed Recycling Transactions (Orders)
+            if (regularUser != null && customer2 != null && customer3 != null)
             {
                 var transactions = new[]
                 {
-                    new RecyclingTransaction(regularUser.Id, petBottle.Id, 20, 30.00m),
-                    new RecyclingTransaction(regularUser.Id, sodaCan.Id, 50, 150.00m),
-                    new RecyclingTransaction(regularUser.Id, glassBottle.Id, 10, 25.00m),
-                    new RecyclingTransaction(regularUser.Id, hdpeJug.Id, 15, 33.00m),
-                    new RecyclingTransaction(regularUser.Id, steelCan.Id, 8, 14.40m)
+                    new RecyclingTransaction(regularUser.Id, petBottle.Id, 20, 30.00m, "Completed"),
+                    new RecyclingTransaction(regularUser.Id, sodaCan.Id, 50, 150.00m, "Completed"),
+                    new RecyclingTransaction(regularUser.Id, glassBottle.Id, 10, 25.00m, "Pending"),
+                    new RecyclingTransaction(regularUser.Id, hdpeJug.Id, 15, 33.00m, "Completed"),
+                    new RecyclingTransaction(regularUser.Id, steelCan.Id, 8, 14.40m, "Cancelled"),
+
+                    new RecyclingTransaction(customer2.Id, sodaCan.Id, 100, 300.00m, "Completed"),
+                    new RecyclingTransaction(customer2.Id, petBottle.Id, 60, 90.00m, "Completed"),
+                    new RecyclingTransaction(customer2.Id, glassBottle.Id, 40, 100.00m, "Completed"),
+
+                    new RecyclingTransaction(customer3.Id, cardboard.Id, 50, 40.00m, "Completed"),
+                    new RecyclingTransaction(customer3.Id, petBottle.Id, 30, 45.00m, "Pending"),
+                    new RecyclingTransaction(customer3.Id, steelCan.Id, 25, 45.00m, "Completed")
                 };
 
                 context.RecyclingTransactions.AddRange(transactions);
