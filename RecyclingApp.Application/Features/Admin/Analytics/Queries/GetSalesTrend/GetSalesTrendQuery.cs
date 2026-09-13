@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RecyclingApp.Application.Common.Interfaces;
 using RecyclingApp.Application.Common.Models;
 using RecyclingApp.Application.Features.Admin.Analytics.DTOs;
+using RecyclingApp.Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -48,25 +49,42 @@ public class GetSalesTrendQueryHandler : IRequestHandler<GetSalesTrendQuery, Res
             _ => endDate.AddMonths(-12)       // 12 months
         };
 
-        // 1. Fetch filtered completed transactions from the database
-        var transactions = await _context.RecyclingTransactions
+        // 1. Fetch filtered non-cancelled orders from the database
+        var orders = await _context.Orders
             .AsNoTracking()
-            .Where(t => t.Status == "Completed" && t.TransactionDate >= startDate && t.TransactionDate <= endDate)
-            .OrderBy(t => t.TransactionDate)
-            .Select(t => new
+            .Include(o => o.Items)
+            .Where(o => o.Status != OrderStatus.Cancelled && o.CreatedAtUtc >= startDate && o.CreatedAtUtc <= endDate)
+            .OrderBy(o => o.CreatedAtUtc)
+            .Select(o => new
             {
-                t.TransactionDate,
-                t.Amount,
-                t.Quantity
+                TransactionDate = o.CreatedAtUtc,
+                Amount = o.TotalAmount,
+                Quantity = o.Items.Sum(i => i.Quantity)
             })
             .ToListAsync(cancellationToken);
+
+        // Fallback to legacy transactions if no orders in timeframe
+        if (orders.Count == 0)
+        {
+            orders = await _context.RecyclingTransactions
+                .AsNoTracking()
+                .Where(t => t.Status == "Completed" && t.TransactionDate >= startDate && t.TransactionDate <= endDate)
+                .OrderBy(t => t.TransactionDate)
+                .Select(t => new
+                {
+                    t.TransactionDate,
+                    t.Amount,
+                    t.Quantity
+                })
+                .ToListAsync(cancellationToken);
+        }
 
         // 2. Group dynamically based on the requested interval
         var dataPoints = new List<SalesTrendPointDto>();
 
         if (period == "daily")
         {
-            var grouped = transactions
+            var grouped = orders
                 .GroupBy(t => t.TransactionDate.Date)
                 .OrderBy(g => g.Key);
 
@@ -84,7 +102,7 @@ public class GetSalesTrendQueryHandler : IRequestHandler<GetSalesTrendQuery, Res
         else if (period == "weekly")
         {
             var calendar = CultureInfo.InvariantCulture.Calendar;
-            var grouped = transactions
+            var grouped = orders
                 .GroupBy(t =>
                 {
                     var week = calendar.GetWeekOfYear(t.TransactionDate, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
@@ -106,7 +124,7 @@ public class GetSalesTrendQueryHandler : IRequestHandler<GetSalesTrendQuery, Res
         }
         else // monthly
         {
-            var grouped = transactions
+            var grouped = orders
                 .GroupBy(t => new { t.TransactionDate.Year, t.TransactionDate.Month })
                 .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month);
 
@@ -123,8 +141,8 @@ public class GetSalesTrendQueryHandler : IRequestHandler<GetSalesTrendQuery, Res
             }
         }
 
-        var totalRevenue = transactions.Sum(t => t.Amount);
-        var totalOrders = transactions.Count;
+        var totalRevenue = dataPoints.Sum(p => p.TotalRevenue);
+        var totalOrders = dataPoints.Sum(p => p.OrderCount);
 
         var trendDto = new SalesTrendDto(
             period,
@@ -146,5 +164,9 @@ public class GetSalesTrendQueryValidator : AbstractValidator<GetSalesTrendQuery>
         RuleFor(x => x.Period)
             .Must(p => string.IsNullOrWhiteSpace(p) || new[] { "daily", "weekly", "monthly" }.Contains(p.ToLowerInvariant()))
             .WithMessage("Period must be 'daily', 'weekly', or 'monthly'.");
+
+        RuleFor(x => x)
+            .Must(x => !x.StartDate.HasValue || !x.EndDate.HasValue || x.StartDate <= x.EndDate)
+            .WithMessage("StartDate cannot be after EndDate.");
     }
 }

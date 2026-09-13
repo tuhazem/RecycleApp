@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RecyclingApp.Application.Common.Interfaces;
 using RecyclingApp.Application.Common.Models;
 using RecyclingApp.Application.Features.Admin.Analytics.DTOs;
+using RecyclingApp.Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,20 +31,38 @@ public class GetTopSellingProductsQueryHandler : IRequestHandler<GetTopSellingPr
     {
         var count = request.Count is < 1 or > 50 ? 5 : request.Count;
 
-        // 1. Group transactions on the database server to calculate quantity and revenue per product
-        var topProductAggregates = await _context.RecyclingTransactions
+        // 1. Group order items on the database server to calculate quantity and revenue per product
+        var topProductAggregates = await _context.OrderItems
             .AsNoTracking()
-            .Where(t => t.Status != "Cancelled")
-            .GroupBy(t => t.ProductId)
+            .Where(i => i.Order.Status != OrderStatus.Cancelled)
+            .GroupBy(i => i.ProductId)
             .Select(g => new
             {
                 ProductId = g.Key,
-                TotalQuantitySold = g.Sum(t => t.Quantity),
-                TotalRevenueGenerated = g.Sum(t => t.Amount)
+                TotalQuantitySold = g.Sum(i => i.Quantity),
+                TotalRevenueGenerated = g.Sum(i => i.UnitPrice * i.Quantity)
             })
             .OrderByDescending(g => g.TotalQuantitySold)
             .Take(count)
             .ToListAsync(cancellationToken);
+
+        // Fallback to legacy transactions if no orders exist yet
+        if (topProductAggregates.Count == 0)
+        {
+            topProductAggregates = await _context.RecyclingTransactions
+                .AsNoTracking()
+                .Where(t => t.Status != "Cancelled")
+                .GroupBy(t => t.ProductId)
+                .Select(g => new
+                {
+                    ProductId = g.Key,
+                    TotalQuantitySold = g.Sum(t => t.Quantity),
+                    TotalRevenueGenerated = g.Sum(t => t.Amount)
+                })
+                .OrderByDescending(g => g.TotalQuantitySold)
+                .Take(count)
+                .ToListAsync(cancellationToken);
+        }
 
         if (topProductAggregates.Count == 0)
         {

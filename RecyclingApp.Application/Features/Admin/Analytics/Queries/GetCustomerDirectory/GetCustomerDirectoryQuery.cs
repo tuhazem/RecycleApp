@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RecyclingApp.Application.Common.Interfaces;
 using RecyclingApp.Application.Common.Models;
 using RecyclingApp.Application.Features.Admin.Analytics.DTOs;
+using RecyclingApp.Domain.Enums;
 using System;
 using System.Linq;
 using System.Threading;
@@ -64,17 +65,17 @@ public class GetCustomerDirectoryQueryHandler : IRequestHandler<GetCustomerDirec
 
         var userIds = users.Select(u => u.Id).ToList();
 
-        // 3. Batch aggregate purchase statistics for the current page users
-        var userStats = await _context.RecyclingTransactions
+        // 3. Batch aggregate purchase statistics for the current page users from Orders table
+        var userStats = await _context.Orders
             .AsNoTracking()
-            .Where(t => userIds.Contains(t.UserId))
-            .GroupBy(t => t.UserId)
+            .Where(o => userIds.Contains(o.CustomerId))
+            .GroupBy(o => o.CustomerId)
             .Select(g => new
             {
                 UserId = g.Key,
                 TotalOrdersCount = g.Count(),
-                TotalSpentAmount = g.Where(t => t.Status == "Completed").Sum(t => (decimal?)t.Amount) ?? 0m,
-                LastOrderDate = g.Max(t => (DateTime?)t.TransactionDate)
+                TotalSpentAmount = g.Where(o => o.Status != OrderStatus.Cancelled).Sum(o => (decimal?)o.TotalAmount) ?? 0m,
+                LastOrderDate = g.Max(o => (DateTime?)o.CreatedAtUtc)
             })
             .ToDictionaryAsync(s => s.UserId, cancellationToken);
 

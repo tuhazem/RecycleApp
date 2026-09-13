@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RecyclingApp.Application.Common.Interfaces;
 using RecyclingApp.Application.Common.Models;
 using RecyclingApp.Application.Features.Admin.Analytics.DTOs;
+using RecyclingApp.Domain.Enums;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -29,20 +30,38 @@ public class GetTopCustomersQueryHandler : IRequestHandler<GetTopCustomersQuery,
     {
         var count = request.Count is < 1 or > 50 ? 5 : request.Count;
 
-        // 1. Database-level aggregation of customer purchase statistics
-        var topCustomerAggregates = await _context.RecyclingTransactions
+        // 1. Database-level aggregation of customer purchase statistics from Orders table
+        var topCustomerAggregates = await _context.Orders
             .AsNoTracking()
-            .Where(t => t.Status != "Cancelled")
-            .GroupBy(t => t.UserId)
+            .Where(o => o.Status != OrderStatus.Cancelled)
+            .GroupBy(o => o.CustomerId)
             .Select(g => new
             {
                 UserId = g.Key,
                 TotalOrdersPlaced = g.Count(),
-                TotalSpentAmount = g.Sum(t => t.Amount)
+                TotalSpentAmount = g.Sum(o => o.TotalAmount)
             })
             .OrderByDescending(g => g.TotalSpentAmount)
             .Take(count)
             .ToListAsync(cancellationToken);
+
+        // Fallback to legacy transactions if no orders exist yet
+        if (topCustomerAggregates.Count == 0)
+        {
+            topCustomerAggregates = await _context.RecyclingTransactions
+                .AsNoTracking()
+                .Where(t => t.Status != "Cancelled")
+                .GroupBy(t => t.UserId)
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    TotalOrdersPlaced = g.Count(),
+                    TotalSpentAmount = g.Sum(t => t.Amount)
+                })
+                .OrderByDescending(g => g.TotalSpentAmount)
+                .Take(count)
+                .ToListAsync(cancellationToken);
+        }
 
         if (topCustomerAggregates.Count == 0)
         {

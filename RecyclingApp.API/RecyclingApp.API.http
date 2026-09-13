@@ -157,5 +157,8 @@ Content-Type: application/json
   "status": 3
 }
 
-
-
+### 21. Get My Orders (GET /api/orders/my-orders)
+# Retrieves all orders belonging to the authenticated customer
+GET {{baseUrl}}/api/orders/my-orders
+Authorization: Bearer {{authToken}}
+Accept: application/json

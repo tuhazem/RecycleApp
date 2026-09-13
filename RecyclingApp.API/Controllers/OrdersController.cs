@@ -126,6 +126,28 @@ public class OrdersController : ControllerBase
 
         return Ok(new { message = result.Message, newStatus = result.NewStatusName });
     }
+
+    /// <summary>
+    /// Retrieves all pickup orders placed by the currently authenticated customer.
+    /// </summary>
+    [HttpGet("my-orders")]
+    [HttpGet("myOrders")]
+    [Authorize]
+    [ProducesResponseType(typeof(List<PickupOrderResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyOrders()
+    {
+        var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(currentUserId))
+        {
+            return Unauthorized(new { message = "User is not authenticated." });
+        }
+
+        var query = new RecyclingApp.Application.Features.Orders.Queries.GetMyOrders.GetMyOrdersQuery(currentUserId);
+        var orders = await _mediator.Send(query);
+
+        return Ok(orders);
+    }
 }
 
 public record UpdateOrderStatusRequest(RecyclingApp.Domain.Enums.OrderStatus Status);
