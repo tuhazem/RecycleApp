@@ -3,8 +3,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using RecyclingApp.API.Hubs;
 using RecyclingApp.API.Middleware;
 using RecyclingApp.Application.Common.Behaviors;
 using RecyclingApp.Application.Common.Interfaces;
@@ -16,6 +18,7 @@ using RecyclingApp.Infrastructure.Security;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,11 +27,16 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? "Server=(localdb)\\mssqllocaldb;Database=RecyclingDb;Trusted_Connection=True;MultipleActiveResultSets=true";
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
     options.UseSqlServer(connectionString, sqlOptions =>
         sqlOptions.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(10),
-            errorNumbersToAdd: null)));
+            errorNumbersToAdd: null));
+
+    // Suppress PendingModelChangesWarning in EF Core 9 to prevent startup crash on model updates
+    options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
+});
 
 builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
 
@@ -72,7 +80,28 @@ builder.Services.AddMediatR(cfg =>
 // 6. Configure FluentValidation assemblies
 builder.Services.AddValidatorsFromAssembly(applicationAssembly);
 
-// 7. Configure JWT Authentication
+// 7. Configure SignalR
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
+
+// 8. Configure CORS for Flutter (Mobile, Web, Emulator)
+const string FlutterCorsPolicy = "FlutterCorsPolicy";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(FlutterCorsPolicy, policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+// 9. Configure JWT Authentication (with query string token extraction for SignalR WebSockets)
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "RecyclingApp";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "RecyclingAppUsers";
@@ -95,11 +124,25 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret ?? "antigravity_very_secure_default_key_32_chars_long")),
         ClockSkew = TimeSpan.Zero
     };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddControllers();
 
-// 8. Swagger generation with JWT Authorization inputs
+// 10. Swagger generation with JWT Authorization inputs
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -168,7 +211,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// 9. Middleware configuration
+// 11. Middleware configuration
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -179,9 +222,15 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
 
+app.UseCors(FlutterCorsPolicy);
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
+// 12. Map SignalR Hub Endpoint
+app.MapHub<PickUpHub>("/hubs/pickup");
+
 app.Run();
+

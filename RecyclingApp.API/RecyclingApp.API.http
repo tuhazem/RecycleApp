@@ -107,3 +107,55 @@ Accept: application/json
 GET {{baseUrl}}/api/admin/analytics/sales-trend?period=daily
 Authorization: Bearer {{adminToken}}
 Accept: application/json
+
+###############################################################################
+### PICKUP ORDERS & SIGNALR REAL-TIME FLOW
+###############################################################################
+
+### 17. Get Active Products (to pick Product ID for order)
+# @name getProducts
+GET {{baseUrl}}/api/products?pageNumber=1&pageSize=5
+Accept: application/json
+
+### 18. Create Pickup Order (POST /api/orders/pickup)
+# Authenticated customer (or provide customerId in body).
+# No need to send unitPrice or productName — server fetches active price & name from DB.
+# @name createPickupOrder
+POST {{baseUrl}}/api/orders/pickup
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "notes": "Please prepare in a box, picking up tomorrow afternoon",
+  "pickupTime": "2026-09-15T15:00:00Z",
+  "items": [
+    {
+      "productId": "{{getProducts.response.body.items[0].id}}",
+      "quantity": 3
+    }
+  ]
+}
+
+### 19. Get Order By Id (GET /api/orders/{id})
+@createdOrderId = {{createPickupOrder.response.body.id}}
+GET {{baseUrl}}/api/orders/{{createdOrderId}}
+Accept: application/json
+
+### 20. Update Order Status (PUT /api/orders/{id}/status)
+# Status options:
+# 1 = Pending
+# 2 = Confirmed
+# 3 = ReadyForPickup
+# 4 = Completed
+# 5 = Cancelled
+# Broadcasts live status update to SignalR clients
+PUT {{baseUrl}}/api/orders/{{createdOrderId}}/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": 3
+}
+
+
+

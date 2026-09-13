@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RecyclingApp.Application.Common.Interfaces;
 using RecyclingApp.Application.Common.Models;
 using RecyclingApp.Application.Features.Admin.Analytics.DTOs;
+using RecyclingApp.Domain.Enums;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,18 +26,31 @@ public class GetAnalyticsSummaryQueryHandler : IRequestHandler<GetAnalyticsSumma
 
     public async Task<Result<SummaryMetricsDto>> Handle(GetAnalyticsSummaryQuery request, CancellationToken cancellationToken)
     {
-        // 1. Transaction / Order Aggregations via DB server
-        var transactionsQuery = _context.RecyclingTransactions.AsNoTracking();
+        // 1. Order Aggregations from Orders table
+        var ordersQuery = _context.Orders.AsNoTracking();
 
-        var totalOrders = await transactionsQuery.CountAsync(cancellationToken);
-        
-        var totalRevenue = await transactionsQuery
+        var ordersCount = await ordersQuery.CountAsync(cancellationToken);
+
+        var pendingOrders = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Pending, cancellationToken);
+        var confirmedOrders = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Confirmed, cancellationToken);
+        var readyForPickupOrders = await ordersQuery.CountAsync(o => o.Status == OrderStatus.ReadyForPickup, cancellationToken);
+        var completedOrders = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Completed, cancellationToken);
+        var cancelledOrders = await ordersQuery.CountAsync(o => o.Status == OrderStatus.Cancelled, cancellationToken);
+
+        var ordersRevenue = await ordersQuery
+            .Where(o => o.Status != OrderStatus.Cancelled)
+            .SumAsync(o => (decimal?)o.TotalAmount, cancellationToken) ?? 0m;
+
+        // Legacy transactions support (if any exist in database)
+        var legacyTransactions = _context.RecyclingTransactions.AsNoTracking();
+        var legacyCompleted = await legacyTransactions.CountAsync(t => t.Status == "Completed", cancellationToken);
+        var legacyRevenue = await legacyTransactions
             .Where(t => t.Status == "Completed")
             .SumAsync(t => (decimal?)t.Amount, cancellationToken) ?? 0m;
 
-        var completedOrders = await transactionsQuery.CountAsync(t => t.Status == "Completed", cancellationToken);
-        var pendingOrders = await transactionsQuery.CountAsync(t => t.Status == "Pending", cancellationToken);
-        var cancelledOrders = await transactionsQuery.CountAsync(t => t.Status == "Cancelled", cancellationToken);
+        var totalOrders = ordersCount + (ordersCount == 0 ? legacyCompleted : 0);
+        var totalRevenue = ordersRevenue + (ordersCount == 0 ? legacyRevenue : 0);
+        var finalCompleted = completedOrders + (ordersCount == 0 ? legacyCompleted : 0);
 
         // 2. Customer Aggregations
         var totalCustomers = await _context.Users.AsNoTracking().CountAsync(cancellationToken);
@@ -49,13 +63,19 @@ public class GetAnalyticsSummaryQueryHandler : IRequestHandler<GetAnalyticsSumma
         var lowStockCount = await activeProductsQuery.CountAsync(p => p.StockQuantity <= p.LowStockThreshold && p.StockQuantity > 0, cancellationToken);
 
         var summary = new SummaryMetricsDto(
-            totalRevenue,
-            totalOrders,
-            new OrderStatusBreakdownDto(completedOrders, pendingOrders, cancelledOrders),
-            totalCustomers,
-            inStockCount,
-            outOfStockCount,
-            lowStockCount
+            TotalRevenue: totalRevenue,
+            TotalOrders: totalOrders,
+            OrdersByStatus: new OrderStatusBreakdownDto(
+                Pending: pendingOrders,
+                Confirmed: confirmedOrders,
+                ReadyForPickup: readyForPickupOrders,
+                Completed: finalCompleted,
+                Cancelled: cancelledOrders
+            ),
+            TotalCustomers: totalCustomers,
+            ActiveProductsInStock: inStockCount,
+            ActiveProductsOutOfStock: outOfStockCount,
+            LowStockProductsCount: lowStockCount
         );
 
         return Result<SummaryMetricsDto>.Success(summary);

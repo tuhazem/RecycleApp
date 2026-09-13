@@ -14,17 +14,28 @@ public record CustomerOrderHistoryDto(
     string Address,
     decimal TotalSpent,
     int TotalOrders,
-    List<CustomerOrderItemDto> Orders);
+    List<CustomerOrderSummaryDto> Orders);
 
 /// <summary>
-/// Individual line item / transaction entry in a customer's order history.
+/// Detailed summary of an individual order placed by the customer.
+/// </summary>
+public record CustomerOrderSummaryDto(
+    Guid OrderId,
+    string OrderType,
+    string Status,
+    decimal TotalAmount,
+    DateTime OrderDate,
+    DateTime? PickupTime,
+    string? Notes,
+    List<CustomerOrderItemDto> Items);
+
+/// <summary>
+/// Individual line item entry within an order.
 /// </summary>
 public record CustomerOrderItemDto(
     Guid OrderId,
     Guid ProductId,
     string ProductName,
-    string SKU,
+    decimal UnitPrice,
     int Quantity,
-    decimal Amount,
-    DateTime OrderDate,
-    string Status);
+    decimal SubTotal);

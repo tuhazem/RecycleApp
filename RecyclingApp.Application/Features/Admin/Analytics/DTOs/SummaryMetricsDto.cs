@@ -18,6 +18,8 @@ public record SummaryMetricsDto(
 /// Breakdown of orders by fulfillment/processing status.
 /// </summary>
 public record OrderStatusBreakdownDto(
-    int Completed,
     int Pending,
+    int Confirmed,
+    int ReadyForPickup,
+    int Completed,
     int Cancelled);
